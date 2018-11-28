@@ -9,7 +9,7 @@ from sanic.request import Request
 from liver.auth.service import auth
 
 
-@auth.post('registration', name='registration')
+@auth.post('/registration')
 async def register(req: Request):
     if not req.json:
         return response.json({'message': 'No data!'}, status=400)
