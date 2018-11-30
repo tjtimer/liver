@@ -12,6 +12,8 @@ from security.crypt import pwd_ctx
 
 auth = Blueprint('auth', url_prefix='/auth')
 
+db = None
+
 
 async def setup_db(cfg):
     global db
@@ -22,7 +24,14 @@ async def setup_db(cfg):
         await db.accounts.add(
             [
                 {'_key': 'tjtimer@mail.com',
-                 'passwd': pwd_ctx.hash('tjs-pass', category='admin')}
+                 'email': 'tjtimer@mail.com',
+                 'passwd': pwd_ctx.hash('tjs-pass', category='admin')},
+                {'_key': 'jane-doe@mail.com',
+                 'email': 'jane-doe@mail.com',
+                 'passwd': pwd_ctx.hash('jd-pass', category='user')},
+                {'_key': 'anon@mail.com',
+                 'email': 'anon@mail.com',
+                 'passwd': pwd_ctx.hash('anon-pass', category='user')}
             ]
         )
 
