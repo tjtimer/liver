@@ -116,4 +116,8 @@ setup(
     cmdclass={
         'upload': UploadCommand,
     },
+<<<<<<< Updated upstream
 )
+=======
+)
+>>>>>>> Stashed changes

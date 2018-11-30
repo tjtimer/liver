@@ -1,3 +1,5 @@
 venv/
 .idea/
 liver/auth/__pycache__/
+public/
+templates/

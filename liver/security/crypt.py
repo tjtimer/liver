@@ -11,8 +11,6 @@ from cryptography.hazmat.primitives.ciphers import (
 )
 from passlib.context import CryptContext
 
-from bonham.storage import file
-
 
 pwd_ctx = CryptContext.from_path('ctx.ini')
 

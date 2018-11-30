@@ -1,6 +1,9 @@
 STATIC_DIR: ./public/static
 TEMPLATES_DIR: ./templates
-DATABASES:
-  - auth-db
-  - stats-db
-  - public-db
+COMPONENTS:
+  auth:
+    database: auth:auth-pw
+  stats:
+    database: stats:stats-pw
+  public:
+    database: pub:pub-pw
