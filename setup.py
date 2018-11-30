@@ -16,7 +16,7 @@ VERSION = '0.0.1dev'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'sanic', 'jinja2-sanic', 'pytest-sanic',
+    'sanic', 'jinja2-sanic', 'pytest-sanic', 'arrow', 'PyJWT', 'aiofiles', 'cryptography'
 ]
 
 # What packages are optional?
