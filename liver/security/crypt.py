@@ -2,17 +2,12 @@ import asyncio
 import os
 from pathlib import Path
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.backends import openssl
+from cryptography.hazmat.backends import default_backend, openssl
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.ciphers import (
     Cipher, algorithms, modes
 )
-from passlib.context import CryptContext
-
-
-pwd_ctx = CryptContext.from_path('ctx.ini')
 
 
 def encrypt(key, plaintext, associated_data):
