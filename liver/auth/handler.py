@@ -19,3 +19,4 @@ async def register(req: Request):
     if None in [email, passwd, passwd_again] or passwd_again != passwd:
         return response.json({'message': 'Invalid credentials!'}, status=400)
 
+

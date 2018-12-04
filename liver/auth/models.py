@@ -5,6 +5,13 @@ created: 03.12.18
 """
 from graphene import String
 
+from storage.db import Node
+
 
 class Account(Node):
-    password = String()
+    __password = String()
+
+
+class RefreshToken(Node):
+    account_id = String()
+    token_string = String()

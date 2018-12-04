@@ -3,9 +3,11 @@ db
 author: Tim "tjtimer" Jedro
 created: 30.11.18
 """
+from pprint import pprint
+
 import arrow
 import inflect as inflect
-from aio_arango.client import ArangoAdmin
+from aio_arango.client import ArangoAdmin, AccessLevel
 from aio_arango.db import ArangoDB, DocumentType
 from graphene import ID, ObjectType, Scalar, String
 from graphql.language import ast
@@ -42,7 +44,9 @@ class BaseModel(ObjectType):
     @classmethod
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._collection_name_ = ifl.plural(cls.__name__.lower())
+        print("init subclass", cls)
+        pprint(cls.__dict__)
+        cls.__collection_name = ifl.plural(cls.__name__.lower())
         cls._id = ID()
         cls._key = String()
         cls._rev = String()
@@ -51,7 +55,7 @@ class BaseModel(ObjectType):
 
     @property
     def collection_name(self)->str:
-        return self._collection_name_
+        return self.__collection_name
 
     @property
     def data(self) -> dict:
@@ -71,7 +75,7 @@ class BaseModel(ObjectType):
         return self
 
     async def update(self, client):
-        obj = await client[self.collection_name].get(self._id)
+        obj = await client[self.collection_name].update(self._id, self.data)
         self.__dict__.update(**obj)
         return self
 
@@ -94,21 +98,18 @@ class Edge(BaseModel):
 
 
 async def setup_admin(config: dict):
-    db = ArangoAdmin(*config.USER.split(':'))
+    db = ArangoAdmin(*config.DB_ADMIN.split(':'))
     await db.login()
     return db
 
 
 async def setup(cli: ArangoAdmin, cfg: dict)->ArangoDB:
     db_name = cfg['name']
-    cred = cfg['user'].split(':')
+    name, passwd = cfg['user'].split(':')
     if db_name not in await cli.get_dbs():
+        await cli.create_user(name, passwd)
         await cli.create_db(db_name)
-        await cli.create_user(*cred)
-    db = ArangoDB(*cred, db_name)
+        await cli.set_access_level(name, db_name, level=AccessLevel.FULL)
+    db = ArangoDB(name, passwd, db_name)
     await db.login()
-    for col_name in cfg['schema']['nodes'].keys():
-        await db.create_collection(col_name)
-    for col_name in cfg['schema']['edges'].keys():
-        await db.create_collection(col_name, DocumentType.EDGE)
     return db

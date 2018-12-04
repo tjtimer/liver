@@ -3,8 +3,6 @@ app
 author: Tim "tjtimer" Jedro
 created: 28.11.18
 """
-import asyncio
-from getpass import getpass
 from pprint import pprint
 
 import jinja2
@@ -12,9 +10,8 @@ import jinja2_sanic
 import yaml
 from sanic import Sanic, response
 
-import db
-import security
 from auth.service import auth
+from storage import db
 
 blueprints = [auth]
 
@@ -38,13 +35,14 @@ async def index(_):
 @app.listener('before_server_start')
 async def setup(app, loop):
     print('setup app')
-    app.db = await db.setup(app.config)
-    pprint(app)
+    app.db_admin = await db.setup_admin(app.config)
+    pprint(app.__dict__)
 
 
 @app.listener('after_server_stop')
 async def close(app, loop):
-    pass
+    await app.db_admin.close()
+    print("db admin closed")
 
 
 app.blueprint(*blueprints)

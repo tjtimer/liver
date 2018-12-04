@@ -3,14 +3,16 @@ service
 author: Tim "tjtimer" Jedro
 created: 28.11.18
 """
+import asyncio
 from pprint import pprint
 
-from aio_arango.db import ArangoDB
 from sanic import Blueprint
 
 from security.service import pwd_ctx
+from storage import db
 
 auth = Blueprint('auth', url_prefix='/auth')
+auth.db = None
 
 init_accounts = [
                 {'_key': 'tjtimer@mail.com',
@@ -25,29 +27,19 @@ init_accounts = [
             ]
 
 
-async def setup_db(app, cfg):
-    if 'auth-db' not in await app.db.get_dbs():
-        await app.db.create_db('auth-db')
-        await app.db.create_user('auth', cfg['pass'])
-    db = ArangoDB('auth', cfg['pass'], 'auth-db')
-    await db.login()
-    if 'accounts' not in list(await db.get_collections()):
-        await db.create_collection('accounts', )
-        await db.accounts.add(init_accounts)
-
-
 @auth.listener('before_server_start')
 async def setup(app, loop):
     print('setup auth')
     cfg = app.config.COMPONENTS['auth']
-    await setup_db(app, cfg['database'])
+    auth.db = await db.setup(app.db_admin, cfg['database'])
+    print('app')
     pprint(app)
+    print('auth')
+    pprint(auth.__dict__)
 
 
 @auth.listener('before_server_stop')
 async def close(app, loop):
     print('close auth')
-    global db
-    await db.close()
-    pprint(app)
+    await auth.db.close()
 
