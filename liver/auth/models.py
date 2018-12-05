@@ -5,7 +5,7 @@ created: 03.12.18
 """
 from graphene import String
 
-from storage.db import Node
+from storage.models import Node
 
 
 class Account(Node):
@@ -14,4 +14,4 @@ class Account(Node):
 
 class RefreshToken(Node):
     account_id = String()
-    token_string = String()
+    token = String()
