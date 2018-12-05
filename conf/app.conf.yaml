@@ -1,10 +1,11 @@
 STATIC_DIR: ./public/static
 TEMPLATES_DIR: ./templates
-DATABASE: root:arango-pw
+DATABASE:
+  admin: root:arango-pw
 COMPONENTS:
   auth:
     database:
-      pass: :auth-pw
+      pass: auth-pw
   stats:
     database:
       pass: stats-pw
