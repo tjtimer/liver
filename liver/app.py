@@ -12,13 +12,12 @@ from sanic import Sanic, response
 
 from auth.service import auth
 from storage import db
+from utilities import load_config
 
 blueprints = [auth]
 
 app = Sanic()
-
-with open('./conf/app.conf.yaml', 'r') as conf:
-    app.config.update(**yaml.safe_load(conf.read()))
+app.config.update(**load_config('./conf/'))
 
 app.static('/static', app.config.STATIC_DIR)
 
@@ -35,7 +34,6 @@ async def index(_):
 @app.listener('before_server_start')
 async def setup(app, loop):
     print('setup app')
-    app.db_admin = await db.setup_admin(app.config)
     pprint(app.__dict__)
 
 
@@ -46,7 +44,6 @@ async def close(app, loop):
 
 
 app.blueprint(*blueprints)
-
 
 if __name__ == '__main__':
     app.run(port=3666)

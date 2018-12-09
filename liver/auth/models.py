@@ -5,11 +5,11 @@ created: 03.12.18
 """
 from graphene import String
 
-from storage.models import Node
+from storage.model import Node
 
 
 class Account(Node):
-    __password = String()
+    password = String()
 
 
 class RefreshToken(Node):

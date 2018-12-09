@@ -30,12 +30,12 @@ init_accounts = [
 @auth.listener('before_server_start')
 async def setup(app, loop):
     print('setup auth')
-    cfg = app.config.COMPONENTS['auth']
-    auth.db = await db.setup(app.db_admin, cfg['database'])
-    print('app')
-    pprint(app)
+    cfg = app.config.auth
+    auth.db = await db.setup(admin=app.config.DATABASE_ADMIN, **cfg['database'])
     print('auth')
     pprint(auth.__dict__)
+    print('auth.clients')
+    pprint(auth.clients)
 
 
 @auth.listener('before_server_stop')

@@ -3,27 +3,27 @@ db
 author: Tim "tjtimer" Jedro
 created: 30.11.18
 """
+import asyncio
 
-from aio_arango.client import ArangoAdmin, AccessLevel
+from aio_arango.client import ArangoAdmin
 from aio_arango.db import ArangoDB
-from sanic import Sanic
 
 
-async def setup_admin(name, passwd)->ArangoAdmin:
-    db = ArangoAdmin(name, passwd)
-    await db.login()
-    return db
+async def setup(**cfg)->dict:
+    async with ArangoAdmin(*cfg['admin'].split(':')) as admin:
+        db_name = cfg['name']
+        clients_cfg = [cred.split(':') for cred in cfg['clients']]
+        if db_name not in await admin.get_dbs():
+            await asyncio.gather(
+                *(admin.create_user(cred[:2] for cred in clients_cfg)),
+                admin.create_db(db_name)
+            )
 
+            await asyncio.gather(
+                *(admin.set_access_level(usr[0], db_name, level=usr[2])
+                  for usr in clients_cfg)
+            )
 
-async def setup(app: Sanic)->ArangoDB:
-    conf = app.config.database
-    admin = await setup_admin(*conf.ADMIN.split(':'))
-    db_name = cfg['name']
-    name, passwd = cfg['user'].split(':')
-    if db_name not in await cli.get_dbs():
-        await cli.create_user(name, passwd)
-        await cli.create_db(db_name)
-        await cli.set_access_level(name, db_name, level=AccessLevel.FULL)
-    db = ArangoDB(name, passwd, db_name)
-    await db.login()
-    return db
+    clients = {usr[0]: ArangoDB(*usr[:2], db_name) for usr in clients_cfg}
+    await asyncio.gather(*(db.login() for db in clients.values()))
+    return clients

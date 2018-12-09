@@ -1,0 +1,6 @@
+version: 0.0.1
+database:
+  name: auth-db
+  clients:
+    - admin:auth-admin-pw:rw
+    - reader:auth-reader-pw:r
