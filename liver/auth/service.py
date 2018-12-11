@@ -34,8 +34,8 @@ async def setup(app, loop):
     auth.db = await db.setup(admin=app.config.DATABASE_ADMIN, **cfg['database'])
     print('auth')
     pprint(auth.__dict__)
-    print('auth.clients')
-    pprint(auth.clients)
+    print('auth.db')
+    pprint(auth.db)
 
 
 @auth.listener('before_server_stop')

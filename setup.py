@@ -16,7 +16,10 @@ VERSION = '0.0.1dev'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'sanic', 'jinja2-sanic', 'pytest-sanic', 'arrow', 'PyJWT', 'aiofiles', 'cryptography'
+    'sanic', 'jinja2-sanic', 'sanic-graphql', 'graphene',
+    'arrow', 'aiofiles', 'PyYaml',
+    'PyJWT', 'cryptography', 'passlib',
+    'pytest-sanic'
 ]
 
 # What packages are optional?
@@ -115,9 +118,5 @@ setup(
     # $ setup.py publish support.
     cmdclass={
         'upload': UploadCommand,
-    },
-<<<<<<< Updated upstream
+    }
 )
-=======
-)
->>>>>>> Stashed changes

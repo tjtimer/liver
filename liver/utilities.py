@@ -9,6 +9,7 @@ from typing import Iterator
 
 import inflect
 import yaml
+from sanic import Sanic
 
 ifl = inflect.engine()
 
@@ -48,30 +49,32 @@ def flatten(key: str, obj: dict)->dict:
 
 
 class LiverConfig:
-    def __init__(self, path: str):  # path
-        self.__cfg = {}
+    def __init__(self, app: Sanic, path: str):  # path
+        self.__cfg = app.config
         self._dir = Path(path)
+        self.load_config()
 
     def __getattr__(self, item):
         if hasattr(self, item):
             return getattr(self, item)
-        value = self.__cfg[item]
+        value = self.__cfg.get(item.upper(), None)
         if isinstance(value, str) and value.startswith('$$'):
-            return self.__cfg[value]
+            return self.__cfg.get(value, None)
         return value
 
     def __getitem__(self, item):
         if item in self.__dict__.keys():
             return self[item]
-        value = self.__cfg[item]
+        value = self.__cfg.get(item.upper(), None)
         if isinstance(value, str) and value.startswith('$$'):
-            return self.__cfg[value]
+            return self.__cfg.get(value, None)
         return value
 
     def load_config(self):
         for file in self._dir.glob('*.conf*'):
-            key = file.name.split('.conf')[0]
+            key = file.name.split('.conf')[0].upper()
             with file.open() as conf:
                 self.__cfg[key] = flatten(key, yaml.safe_load(conf.read()))
-        print(f'{" loaded config ":^*80}')
+        print(f'{" loaded config ":*^80}')
         pprint(self.__dict__)
+        pprint(self.__cfg)

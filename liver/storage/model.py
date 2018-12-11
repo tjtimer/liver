@@ -3,15 +3,16 @@ model
 author: Tim "tjtimer" Jedro
 created: 04.12.18
 """
+from uuid import UUID
 
 import arrow
-from graphene import ID, ObjectType, Scalar, String
+from graphene import ObjectType, Mutation, Scalar, String
 from graphql.language import ast
 
 from utilities import ifl, snake_case
 
 
-class ArrowType(Scalar):
+class DateTime(Scalar):
 
     @staticmethod
     def serialize(value):
@@ -30,9 +31,30 @@ class ArrowType(Scalar):
     def parse_value(value):
         try:
             return arrow.get(value)
+        except TypeError:
+            return None
+
+
+class ID(Scalar):
+
+    @staticmethod
+    def serialize(value):
+        try:
+            return UUID(value).hex
         except ValueError:
             return None
 
+    @classmethod
+    def parse_literal(cls, node):
+        if isinstance(node, ast.StringValue):
+            return cls.parse_value(node.value)
+
+    @staticmethod
+    def parse_value(value):
+        try:
+            return UUID(value)
+        except ValueError:
+            return None
 
 class ModelName:
     def __init__(self, cls):
@@ -52,14 +74,13 @@ class ModelName:
 
 class BaseModel(ObjectType):
     @classmethod
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls):
         cls.__name = ModelName(cls)
         cls._id = ID()
         cls._key = String()
         cls._rev = String()
-        cls._created = ArrowType()
-        cls._updated = ArrowType()
+        cls._created = DateTime()
+        cls._updated = DateTime()
 
     @property
     def _state(self) -> dict:
