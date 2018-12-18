@@ -27,21 +27,14 @@ def flatten(key: str, obj: dict)->dict:
     to_check = [(key, obj)]
     level = 0
 
-    def handle_nested(key, item):
-        prov_key = f'$${key}_{level}'
-        to_check.append((prov_key, item))
-        return prov_key
-
     while True:
         key, _obj = to_check.pop(0)
         for k, v in _obj.items():
             if isinstance(v, dict):
-                _obj[k] = handle_nested(k, v)
-            elif isinstance(v, Iterator):
-                _obj[k] = v
-                for idx, item in enumerate(v):
-                    if isinstance(item, dict):
-                        _obj[k][idx] = handle_nested(f'{k}_{idx}', v)
+
+                prov_key = f'$${k}-{level}'
+                to_check.append((prov_key, v))
+                _obj[k] = prov_key
         obj[key] = _obj
         if len(to_check) < 1:
             break
@@ -54,17 +47,7 @@ class LiverConfig:
         self._dir = Path(path)
         self.load_config()
 
-    def __getattr__(self, item):
-        if hasattr(self, item):
-            return getattr(self, item)
-        value = self.__cfg.get(item.upper(), None)
-        if isinstance(value, str) and value.startswith('$$'):
-            return self.__cfg.get(value, None)
-        return value
-
     def __getitem__(self, item):
-        if item in self.__dict__.keys():
-            return self[item]
         value = self.__cfg.get(item.upper(), None)
         if isinstance(value, str) and value.startswith('$$'):
             return self.__cfg.get(value, None)

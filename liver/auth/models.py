@@ -3,12 +3,9 @@ models
 author: Tim "tjtimer" Jedro
 created: 03.12.18
 """
-from storage.model import Node
+from graphene import String
 
-
-class AccountStatus(Enum):
-    DISABLED = 0
-    ACTIVE = 1
+from storage.model import Node, Email, Password
 
 
 class Account(Node):

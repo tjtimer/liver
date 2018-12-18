@@ -9,7 +9,8 @@ from pprint import pprint
 from sanic import Blueprint
 
 from security.service import pwd_ctx
-from storage import db
+
+
 
 auth = Blueprint('auth', url_prefix='/auth')
 auth.db = None

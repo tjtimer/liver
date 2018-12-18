@@ -11,17 +11,18 @@ from graphql.execution.executors.asyncio import AsyncioExecutor
 from sanic import Sanic
 from sanic_graphql import GraphQLView
 
-from auth.service import auth
-from utilities import LiverConfig
+#  from auth.service import auth
+from gql.service import gql_schema
 
-blueprints = [auth]
+#  blueprints = [auth]
+STATIC_DIR = '../public/static'
+TEMPLATES_DIR = '../templates'
 
 app = Sanic('D!Liver')
-app.config = LiverConfig(app, './conf/')
 
-app.static('/static', app.config.STATIC_DIR)
+app.static('/static', STATIC_DIR)
 
-loader = jinja2.FileSystemLoader(searchpath=[app.config.TEMPLATES_DIR])
+loader = jinja2.FileSystemLoader(searchpath=[TEMPLATES_DIR])
 jinja2_sanic.setup(app, loader=loader)
 
 app.render = jinja2_sanic.render_template
@@ -36,13 +37,15 @@ async def index(request):
 @app.listener('before_server_start')
 async def setup(app, loop):
     print('setup server')
+
     app.add_route(
         GraphQLView.as_view(
-            schema=schema,
-            executor=AsyncioExecutor(loop=loop)),
+            schema=gql_schema.setup(),
+            executor=AsyncioExecutor(loop=loop),
+            graphiql=True
+        ),
         '/graphql'
     )
-    pprint(app.__dict__)
 
 
 @app.listener('after_server_start')
@@ -61,9 +64,6 @@ async def setup(app, loop):
 async def close(app, loop):
     print("clean up server")
     pprint(app.__dict__)
-
-
-app.blueprint(*blueprints)
 
 
 if __name__ == '__main__':
