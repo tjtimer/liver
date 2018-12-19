@@ -3,13 +3,19 @@ service
 author: Tim "tjtimer" Jedro
 created: 15.12.18
 """
-from storage.model import LiverSchema
+from aio_arango.db import ArangoDB
 
-from .models import Category, MemberOf, Message, Person, WrittenBy, SentTo, Event
+from gql.mutations import create_person, update_person
+from storage.model import LiverSchema
+from .models import Category, Event, MemberOf, Message, Person, SentTo, WrittenBy
 
 gql_schema = LiverSchema(
-    models=(
-        Category, Person, Message, Event,
+    db=ArangoDB('gql-user', 'gql-pw', 'gql-db'),
+    nodes=(
+        Category, Person, Message, Event
+    ),
+    edges=(
         MemberOf, WrittenBy, SentTo
-    )
+    ),
+    mutations=(create_person, update_person)
 )
