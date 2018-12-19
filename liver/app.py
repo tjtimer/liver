@@ -41,7 +41,7 @@ async def setup(app, loop):
     app.add_route(
         GraphQLView.as_view(
             schema=await gql_schema.setup(),
-            context={'db': gql_schema._db},
+            context={'db': gql_schema._db, 'schema': gql_schema},
             executor=AsyncioExecutor(loop=loop),
             graphiql=True
         ),

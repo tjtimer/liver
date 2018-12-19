@@ -3,9 +3,8 @@ models
 author: Tim "tjtimer" Jedro
 created: 15.12.18
 """
-from pprint import pprint
 
-from graphene import String, Boolean, List, Int
+from graphene import String
 
 from storage.model import Node, Edge, DateTime
 
@@ -13,20 +12,6 @@ from storage.model import Node, Edge, DateTime
 class Category(Node):
     title = String()
     definition = String()
-
-
-class Person(Node):
-    name = String()
-    email = String()
-    friends = List(lambda: Person, first=Int())
-
-    async def resolve_friends(self, info, first: Int=None):
-        print('first: ', first)
-        friends = []
-        qs = f'FOR p IN people FILTER p._id != \"{self._id}\" RETURN p'
-        async for obj in info.context['db'].query(qs):
-            friends.append(Person(**obj))
-        return friends
 
 
 class Computer(Node):

@@ -1,12 +1,21 @@
 """
-mutations
+person
 author: Tim "tjtimer" Jedro
-created: 18.12.18
+created: 19.12.18
 """
+from graphene import String, List, Int
 
-from graphene import String
+from storage.model import Node
 
-from gql.models import Person
+
+class Person(Node):
+    name = String()
+    email = String()
+    friends = List(lambda: Person, first=Int())
+
+    async def resolve_friends(self, info, first: Int=None):
+        qs = f'FOR p IN people FILTER p._id != \"{self._id}\" RETURN p'
+        return [Person(**obj) async for obj in info.context['db'].query(qs)]
 
 
 async def create_person(_, info, name: String, email: String)->Person:
@@ -22,5 +31,4 @@ async def update_person(_, info, _id: String, name: String = None, email: String
     if email not in ('', None):
         p.email = email
     await p.update(info.context['db'])
-    await p.get(info.context['db'])
     return p
