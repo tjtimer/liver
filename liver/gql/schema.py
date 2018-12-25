@@ -5,38 +5,37 @@ created: 19.12.18
 """
 import asyncio
 from pprint import pprint
-from typing import Optional
+from typing import Coroutine, Iterator, Optional
 
 from aio_arango.db import ArangoDB, DocumentType
-from graphene import ObjectType, Schema, Field, String, List, Mutation
+from graphene import Field, Int, List, Mutation, ObjectType, Schema, String
 
+from storage.model import Node
 from utilities import snake_case
 
 
-def _find(cls):
-    async def inner(_, info, **kwargs):
-        obj = cls(**kwargs)
-        db = info.context['db']
-        await obj.get(db)
-        return obj
+class LiverList(List):
+    def __init__(self, cls: (Node, ObjectType), query: str = None, resolver: Coroutine = None):
+        self._cls = cls
+        self._query = query
+        if resolver is None:
+            resolver = self.resolve
+        super().__init__(cls, first=Int(), skip=Int(), search=String(), resolver=resolver)
 
-    return inner
-
-
-def _all(cls):
-    async def inner(_, info, **kwargs):
-        pprint(info.context['schema'].__dict__)
-        db = info.context['db']
-        cls_query = f'FOR x in {cls._collname_} RETURN x'
-        return [cls(**obj) async for obj in db.query(cls_query)]
-    return inner
-
+    async def resolve(self, inst, info, first: Int = None, skip: Int = None, search: String = None):
+        print('inst: ', inst)
+        print('first: ', first)
+        print('skip: ', skip)
+        print('search: ', search)
+        self._query._start_vertex = inst._id
+        return [self._cls(**obj) async for obj in info.context['db'].query(self._query.statement)]
 
 class LiverSchema:
     def __init__(self,
                  db: ArangoDB, *,
                  nodes: Optional[tuple]=None,
                  edges: Optional[tuple]=None,
+                 graphs: Optional[tuple]=None,
                  queries: Optional[tuple]=None,
                  mutations: Optional[tuple] = None,
                  subscriptions: Optional[tuple] = None):
@@ -45,14 +44,15 @@ class LiverSchema:
         self._db = db
         self._nodes = {}
         self._edges = {}
+        self._graphs = {}
         self._queries = {}
         self._mutations = {}
         self._subscriptions = {}
 
         if isinstance(nodes, (list, tuple)):
             self.register_nodes(*nodes)
-        if isinstance(edges, (list, tuple)):
-            self.register_edges(*edges)
+        if isinstance(graphs, (list, tuple)):
+            self.register_graphs(*graphs)
         if isinstance(queries, (list, tuple)):
             self.register_queries(*queries)
         if isinstance(mutations, (list, tuple)):
@@ -60,8 +60,32 @@ class LiverSchema:
         if isinstance(subscriptions, (list, tuple)):
             self.register_subscriptions(*subscriptions)
 
+    def _find(self, cls):
+        async def inner(_, info, **kwargs):
+            obj = cls(**kwargs)
+            await obj.get(self._db)
+            return obj
+        return inner
+
+    def _all(self, cls):
+        async def inner(_, info, first=None, skip=None, **kwargs):
+            print('schema _all: ', cls)
+            pprint(dir(info))
+            pprint(info.field_asts)
+            _q = f'FOR x in {cls._collname_}'
+            if first:
+                limit = f'LIMIT {first}'
+                if skip:
+                    limit = f'LIMIT {skip}, {first}'
+                _q = f'{_q} {limit}'
+            _q = f'{_q} RETURN x'
+            return [cls(**obj) async for obj in self._db.query(_q)]
+        return inner
+
     async def setup(self):
+        print('schema setup')
         await self._db.login()
+
         await asyncio.gather(*(
             self._db.create_collection(name=name)
             for name in self._nodes.keys()
@@ -69,6 +93,20 @@ class LiverSchema:
         await asyncio.gather(*(
             self._db.create_collection(name=name, doc_type=DocumentType.EDGE)
             for name in self._edges.keys()
+        ))
+
+        await asyncio.gather(*(
+            asyncio.gather(*(
+                self._db.create_index(
+                    col._collname_, {k: idx.__dict__[k] for k in ['type', 'fields', 'unique', 'sparse']}
+                )
+                for idx in col._config_.get('indexes', [])
+            ))
+            for col in [*self._nodes.values(), *self._edges.values()]
+        ))
+        await asyncio.gather(*(
+            self._db.create_graph(graph.name, graph.edge_definitions)
+            for graph in self._graphs.values()
         ))
 
         query_master = type(
@@ -92,15 +130,22 @@ class LiverSchema:
         )
         return self._schema
 
+    def register_graph(self, graph):
+        self._graphs[graph.name] = graph
+        self.register_nodes(*graph.nodes)
+        self.register_edges(*graph.edges)
+
     def register_node(self, node):
-        self._nodes[node._collname_] = node
-        self.register_query(
-            type(
-                f'{node.__name__}Query',
-                (ObjectType,),
-                {snake_case(node.__name__): Field(node, _id=String(), resolver=_find(node)),
-                 node._collname_: List(node, resolver=_all(node))})
-        )
+        name, collname = node.__name__, node._collname_
+        if collname not in self._nodes.keys():
+            self._nodes[collname] = node
+            self.register_query(
+                type(
+                    f'{name}Query',
+                    (ObjectType,),
+                    {snake_case(name): Field(node, _id=String(), resolver=self._find(node)),
+                     collname: LiverList(node, resolver=self._all(node))})
+            )
 
     def register_edge(self, edge):
         self._edges[edge._collname_] = edge
@@ -126,6 +171,10 @@ class LiverSchema:
     def register_subscription(self, subscription):
         self._subscriptions[snake_case(subscription.__name__)] = subscription
 
+    def register_graphs(self, *graphs):
+        for graph in graphs:
+            self.register_graph(graph)
+
     def register_nodes(self, *nodes):
         for node in nodes:
             self.register_node(node)
@@ -145,3 +194,12 @@ class LiverSchema:
     def register_subscriptions(self, *subscriptions):
         for subscription in subscriptions:
             self.register_subscription(subscription)
+
+
+class Idx:
+    def __init__(self, *fields: Iterator,
+                 type: str = None, unique: bool = None, sparse: bool = None):
+        self.fields = fields
+        self.type = 'hash' if type is None else type
+        self.unique = True if unique is None else unique
+        self.sparse = True if sparse is None else sparse

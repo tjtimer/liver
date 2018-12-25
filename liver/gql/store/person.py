@@ -3,19 +3,34 @@ person
 author: Tim "tjtimer" Jedro
 created: 19.12.18
 """
-from graphene import String, List, Int
 
-from storage.model import Node
+from graphene import String, Enum, Field
+
+from gql.schema import LiverList, Idx
+from storage.model import Node, Edge
 
 
 class Person(Node):
     name = String()
     email = String()
-    friends = List(lambda: Person, first=Int())
+    friends = LiverList(lambda: Person, query=friends_query)
 
-    async def resolve_friends(self, info, first: Int=None):
-        qs = f'FOR p IN people FILTER p._id != \"{self._id}\" RETURN p'
-        return [Person(**obj) async for obj in info.context['db'].query(qs)]
+    class Config:
+        indexes = [Idx('email')]
+
+
+class Status(Enum):
+    REQUESTED = 0
+    ACCEPTED = 1
+    DENIED = 2
+
+
+class Friendship(Edge):
+    status = Field(Status)
+
+    class Config:
+        indexes = [Idx('_from', '_to')]
+        _any = (Person,)
 
 
 async def create_person(_, info, name: String, email: String)->Person:
@@ -32,3 +47,9 @@ async def update_person(_, info, _id: String, name: String = None, email: String
         p.email = email
     await p.update(info.context['db'])
     return p
+
+
+async def request_friendship(_, info, _id: String, o_id: String)->Friendship:
+    friendship = Friendship(_from=_id, _to=o_id, status=0)
+    await friendship.create(info.context['db'])
+    return friendship

@@ -52,19 +52,19 @@ async def setup(app, loop):
 @app.listener('after_server_start')
 async def setup(app, loop):
     print('server started')
-    pprint(app.__dict__)
+    # pprint(app.__dict__)
 
 
 @app.listener('before_server_stop')
 async def setup(app, loop):
-    print('close server')
-    pprint(app.__dict__)
+    print('closing server')
 
 
 @app.listener('after_server_stop')
 async def close(app, loop):
-    print("clean up server")
-    pprint(app.__dict__)
+    print("cleaning up server")
+    await gql_schema._db.close()
+    # pprint(app.__dict__)
 
 
 if __name__ == '__main__':
