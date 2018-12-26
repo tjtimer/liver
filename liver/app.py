@@ -3,28 +3,30 @@ app
 author: Tim "tjtimer" Jedro
 created: 28.11.18
 """
-from pprint import pprint
+import asyncio
+from uuid import uuid4
 
+import arrow
 import jinja2
 import jinja2_sanic
-from graphql.execution.executors.asyncio import AsyncioExecutor
 from sanic import Sanic
-from sanic_graphql import GraphQLView
 
-#  from auth.service import auth
-from gql.service import gql_schema
+from auth.service import auth
+from gql.service import gql_setup
 
-#  blueprints = [auth]
 STATIC_DIR = '../public/static'
 TEMPLATES_DIR = '../templates'
 
+blueprints = (auth,)
+
 app = Sanic('D!Liver')
+app.on_close = []
+
+app.blueprint(blueprints)
 
 app.static('/static', STATIC_DIR)
-
 loader = jinja2.FileSystemLoader(searchpath=[TEMPLATES_DIR])
 jinja2_sanic.setup(app, loader=loader)
-
 app.render = jinja2_sanic.render_template
 
 
@@ -36,35 +38,16 @@ async def index(request):
 
 @app.listener('before_server_start')
 async def setup(app, loop):
-    print('setup server')
-
-    app.add_route(
-        GraphQLView.as_view(
-            schema=await gql_schema.setup(),
-            context={'db': gql_schema._db, 'schema': gql_schema},
-            executor=AsyncioExecutor(loop=loop),
-            graphiql=True
-        ),
-        '/graphql'
-    )
-
-
-@app.listener('after_server_start')
-async def setup(app, loop):
-    print('server started')
-    # pprint(app.__dict__)
-
-
-@app.listener('before_server_stop')
-async def setup(app, loop):
-    print('closing server')
+    await gql_setup(app, loop)
 
 
 @app.listener('after_server_stop')
 async def close(app, loop):
-    print("cleaning up server")
-    await gql_schema._db.close()
-    # pprint(app.__dict__)
+    print('server stopping')
+    await asyncio.gather(*(
+        func() for func in app.on_close
+    ))
+    print('server stopped')
 
 
 if __name__ == '__main__':

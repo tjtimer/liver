@@ -3,6 +3,7 @@ model
 author: Tim "tjtimer" Jedro
 created: 04.12.18
 """
+from pprint import pprint
 from uuid import UUID
 
 import arrow
@@ -160,30 +161,31 @@ class _BaseModel(ObjectType):
                 not k.startswith('_') and v is not None}
 
     async def create(self, client):
-        self._created = arrow.utcnow()
         obj = await client[self._collname_].add(
-            {**self._state, '_created': self._created.timestamp}
+            {**self._state, '_created': arrow.utcnow().timestamp},
+            params={'returnNew': 'true'}
         )
-        self.__dict__.update(**obj)
+        self.__dict__.update(**obj['new'])
 
     async def get(self, client):
         obj = await client[self._collname_].get(self.id)
         self.__dict__.update(**obj)
 
     async def update(self, client):
-        if self.id in (None, ''):
+        no_id = self.id in (None, '')
+        if no_id:
             raise ClientError(
                 f'Can not update instance of {self._meta.name}. '
                 f'Attribute _id must be given.'
             )
-        data = {**self._state}
-        await self.get(client)
-        self._updated = arrow.utcnow()
         obj = await client[self._collname_].update(
             self.id,
-            {**data, '_updated': self._updated.timestamp}
+            {**self._state, '_updated': arrow.utcnow().timestamp},
+            params={'returnNew': 'true'}
         )
-        self.__dict__.update(**data, **obj)
+        print("updated")
+        pprint(obj)
+        self.__dict__.update(**obj['new'])
 
 
 class Node(_BaseModel):
@@ -206,24 +208,25 @@ class Graph:
 
     def __init__(self, name, edges):
         self.name = name
-        self._edges = set(edges)
+        self._edges = set()
         self._nodes = set()
         self._edge_definitions = set()
         for e in edges:
-            cfg = EdgeConfig(
-                e,
-                **{k: v for k, v in e._config_.items()
-                   if k in ['_any', '_from', '_to']}
-            )
-            self._update(cfg)
+            self._update(e)
 
     @property
     def edge_definitions(self):
         return self._edge_definitions
 
-    def _update(self, cfg):
+    def _update(self, e):
+        cfg = EdgeConfig(
+                e,
+                **{k: v for k, v in e._config_.items()
+                   if k in ['_any', '_from', '_to']}
+            )
         self._edge_definitions.update(cfg.to_dict())
         self._nodes.update(cfg._any, cfg._from, cfg._to)
+        self._edges.add(e)
 
     @property
     def nodes(self):
@@ -237,8 +240,10 @@ class Graph:
 class Query:
 
     def __init__(self, graph_name: str, *,
-                 depth: int or list = None, direction: str = None, ret: str = None):
+                 depth: int or list = None, direction: str = None,
+                 modifiers: list = None, ret: str = None):
         self._graph_name = graph_name
+        self._modifiers = modifiers if isinstance(modifiers, list) else []
         if depth is None:
             depth = 1
         elif isinstance(depth, (list, tuple)):
@@ -249,8 +254,41 @@ class Query:
         self._depth = depth
         self._direction = 'ANY' if direction is None else direction.upper()
         self._ret = 'v' if ret is None else ret
+        self.start_vertex = None
 
     @property
     def statement(self):
-        return (f'FOR v, e, p IN {self._direction} \"{self._start_vertex}\" '
-                f'GRAPH \"{self._graph_name}\" RETURN {self._ret}')
+        return (f'FOR v, e, p IN {self._direction} \"{self.start_vertex}\" '
+                f'GRAPH \"{self._graph_name}\" {" ".join(self._modifiers)} RETURN {self._ret}')
+
+    def lt(self, left, right):
+        self._modifiers.append(f'FILTER {left} < {right}')
+        return self
+
+    def lte(self, left, right):
+        self._modifiers.append(f'FILTER {left} <= {right}')
+        return self
+
+    def eq(self, left, right):
+        self._modifiers.append(f'FILTER {left} == {right}')
+        return self
+
+    def neq(self, left, right):
+        self._modifiers.append(f'FILTER {left} != {right}')
+        return self
+
+    def like(self, left, right):
+        self._modifiers.append(f'FILTER {left} LIKE {right}')
+        return self
+
+    def limit(self, size: int, offset: int = None):
+        if offset is None:
+            offset = 0
+        self._modifiers.append(f'LIMIT {abs(int(offset))}, {abs(int(size))}')
+        return self
+
+    def asc(self, field):
+        self._modifiers.append(f'SORT {field} ASC')
+
+    def desc(self, field):
+        self._modifiers.append(f'SORT {field} DESC')
