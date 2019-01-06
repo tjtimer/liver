@@ -3,12 +3,15 @@ model
 author: Tim "tjtimer" Jedro
 created: 04.12.18
 """
+import asyncio
 from pprint import pprint
-from uuid import UUID
+from random import randint
+from typing import Coroutine
+from uuid import UUID, uuid4
 
 import arrow
 from aio_arango.client import ClientError
-from graphene import ObjectType, Scalar, String
+from graphene import ObjectType, Scalar, String, List, Int, Interface
 from graphql.language import ast
 from graphql.language.ast import StringValue
 
@@ -138,11 +141,13 @@ class _BaseModel(ObjectType):
         if hasattr(cls, 'Config'):
             cls._config_.update(**cls.Config.__dict__)
             delattr(cls, 'Config')
+
         cls._id = String()
         cls._key = String()
         cls._rev = String()
         cls._created = DateTime()
         cls._updated = DateTime()
+
         super().__init_subclass__(**kwargs)
 
     @property
@@ -183,8 +188,6 @@ class _BaseModel(ObjectType):
             {**self._state, '_updated': arrow.utcnow().timestamp},
             params={'returnNew': 'true'}
         )
-        print("updated")
-        pprint(obj)
         self.__dict__.update(**obj['new'])
 
 
@@ -210,9 +213,11 @@ class Graph:
         self.name = name
         self._edges = set()
         self._nodes = set()
-        self._edge_definitions = set()
+        self._edge_definitions = []
         for e in edges:
+            print('edge: ', e)
             self._update(e)
+        print(self.edge_definitions)
 
     @property
     def edge_definitions(self):
@@ -224,7 +229,9 @@ class Graph:
                 **{k: v for k, v in e._config_.items()
                    if k in ['_any', '_from', '_to']}
             )
-        self._edge_definitions.update(cfg.to_dict())
+        d = cfg.to_dict()
+        print('edge config: ', d)
+        self._edge_definitions.append(d)
         self._nodes.update(cfg._any, cfg._from, cfg._to)
         self._edges.add(e)
 
@@ -239,11 +246,87 @@ class Graph:
 
 class Query:
 
-    def __init__(self, graph_name: str, *,
-                 depth: int or list = None, direction: str = None,
-                 modifiers: list = None, ret: str = None):
+    def __init__(self):
+        self._expressions = []
+        self._identifiers = []
+
+    @property
+    def statement(self):
+        return ' '.join(self._expressions)
+
+    def fi(self, identifier, collection):
+        self._expressions.append(f'FOR {identifier} IN {collection}')
+        return self
+
+    def f(self, field):
+        self._expressions.append(f'FILTER {field}')
+        return self
+
+    def and_(self, field):
+        self._expressions.append(f'AND {field}')
+        return self
+
+    def or_(self, field):
+        self._expressions.append(f'OR {field}')
+        return self
+
+    def not_(self, field):
+        self._expressions.append(f'NOT {field}')
+        return self
+
+    def in_(self, list):
+        self._expressions.append(f'IN {list}')
+        return self
+
+    def lt(self, value):
+        self._expressions.append(f'< {value}')
+        return self
+
+    def lte(self, value):
+        self._expressions.append(f'<= {value}')
+        return self
+
+    def eq(self, value):
+        self._expressions.append(f'== {value}')
+        return self
+
+    def neq(self, value):
+        self._expressions.append(f'!= {value}')
+        return self
+
+    def like(self, value):
+        self._expressions.append(f'LIKE "{value}"')
+        return self
+
+    def limit(self, size: int, offset: int = None):
+        if offset is None:
+            offset = 0
+        self._expressions.append(f'LIMIT {abs(int(offset))}, {abs(int(size))}')
+        return self
+
+    def asc(self, field):
+        self._expressions.append(f'SORT {field} ASC')
+        return self
+
+    def desc(self, field):
+        self._expressions.append(f'SORT {field} DESC')
+        return self
+
+    def ret(self, ret_str):
+        self._expressions.append(f'RETURN {ret_str}')
+        return self
+
+
+class QueryGraph(Query):
+
+    def __init__(self,
+                 graph_name: str, *,
+                 depth: int or list = None,
+                 direction: str = None,
+                 ret: str = None):
+        super().__init__()
         self._graph_name = graph_name
-        self._modifiers = modifiers if isinstance(modifiers, list) else []
+
         if depth is None:
             depth = 1
         elif isinstance(depth, (list, tuple)):
@@ -258,37 +341,42 @@ class Query:
 
     @property
     def statement(self):
-        return (f'FOR v, e, p IN {self._direction} \"{self.start_vertex}\" '
-                f'GRAPH \"{self._graph_name}\" {" ".join(self._modifiers)} RETURN {self._ret}')
+        return (f'FOR v, e, p IN {self._depth} {self._direction} \"{self.start_vertex}\" '
+                f'GRAPH \"{self._graph_name}\" {" ".join(self._expressions)} RETURN {self._ret}')
 
-    def lt(self, left, right):
-        self._modifiers.append(f'FILTER {left} < {right}')
-        return self
 
-    def lte(self, left, right):
-        self._modifiers.append(f'FILTER {left} <= {right}')
-        return self
+i = 0
 
-    def eq(self, left, right):
-        self._modifiers.append(f'FILTER {left} == {right}')
-        return self
 
-    def neq(self, left, right):
-        self._modifiers.append(f'FILTER {left} != {right}')
-        return self
+class LiverList(List):
+    def __init__(self, cls: (Node, ObjectType), query: QueryGraph = None, resolver: Coroutine = None):
+        self._cache = {}
+        self._cls = cls
+        if resolver is None:
+            self._query = query
+            resolver = self.resolve
+        super().__init__(cls, first=Int(), skip=Int(), search=String(), resolver=resolver)
 
-    def like(self, left, right):
-        self._modifiers.append(f'FILTER {left} LIKE {right}')
-        return self
-
-    def limit(self, size: int, offset: int = None):
-        if offset is None:
-            offset = 0
-        self._modifiers.append(f'LIMIT {abs(int(offset))}, {abs(int(size))}')
-        return self
-
-    def asc(self, field):
-        self._modifiers.append(f'SORT {field} ASC')
-
-    def desc(self, field):
-        self._modifiers.append(f'SORT {field} DESC')
+    async def resolve(self, inst, info, first: Int = None, skip: Int = None, search: String = None):
+        #
+        # uncomment to see that all resolvers run concurrently
+        #
+        # global i
+        # i += 1
+        # uid = i
+        # delay = randint(2, 10)
+        # print(uid, ' sleeping ', delay)
+        # await asyncio.sleep(delay)
+        # print(uid, ' woke up')
+        self._query.start_vertex = _id = inst._id
+        now = arrow.now()
+        cached = self._cache.get(_id, None)
+        if cached is not None:
+            valid = (now - cached.get('since')).seconds < 5
+            if valid is True:
+                return cached.get('data')
+        result = [self._cls(**obj)
+                  async for obj in info.context['db'].query(self._query.statement)
+                  if obj is not None]
+        self._cache[_id] = dict(since=now, data=result)
+        return result

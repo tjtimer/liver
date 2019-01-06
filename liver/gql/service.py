@@ -7,20 +7,18 @@ from aio_arango.db import ArangoDB
 from graphql.execution.executors.asyncio import AsyncioExecutor
 from sanic_graphql import GraphQLView
 
+from gql import mutations
 from gql.schema import LiverSchema
-from gql.store.person import Friendship, accept_friendship, create_person, deny_friendship, request_friendship, \
-    update_person
+from gql.store.person import Friendship
+from gql.store.task import AssignedTo
 from storage.model import Graph
-
 
 schema = LiverSchema(
     graphs=(
-        Graph('friends', (Friendship,)),
+        Graph('friendsGraph', (Friendship,)),
+        Graph('tasksGraph', (AssignedTo,))
     ),
-    mutations=(
-        create_person, update_person,
-        request_friendship, accept_friendship, deny_friendship
-    )
+    mutations=mutations.__all__
 )
 
 

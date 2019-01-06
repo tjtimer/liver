@@ -4,49 +4,42 @@ author: Tim "tjtimer" Jedro
 created: 19.12.18
 """
 import asyncio
-from pprint import pprint
-from typing import Coroutine, Iterator, Optional
+from typing import Iterator, Optional
 
-import arrow
 from aio_arango.db import ArangoDB, DocumentType
-from graphene import Field, Int, List, Mutation, ObjectType, Schema, String
+from graphene import Field, Mutation, ObjectType, Schema, String
 
-from storage.model import Node, Query
+from storage.model import LiverList
 from utilities import snake_case
 
 
-class LiverList(List):
-    def __init__(self, cls: (Node, ObjectType), query: str or Query = None, resolver: Coroutine = None):
-        self._cache = {}
-        if resolver is None:
-            self._query = query
-            resolver = self.resolve
-        super().__init__(cls, first=Int(), skip=Int(), search=String(), resolver=resolver)
+def find_(cls):
+    async def inner(_, info, **kwargs):
+        obj = cls(**kwargs)
+        await obj.get(info.context['db'])
+        return obj
+    return inner
 
-    async def resolve(self, inst, info, first: Int = None, skip: Int = None, search: String = None):
-        # print('inst: ', inst.name)
-        # print('first: ', first)
-        # print('skip: ', skip)
-        # print('search: ', search)
-        self._query.start_vertex = _id = inst._id
-        now = arrow.now()
-        cached = self._cache.get(_id, None)
-        if cached is not None:
-            age = now - cached.get('since')
-            if age.seconds < 5:
-                return cached.get('data')
-        cls = inst.__class__
-        result = [cls(**obj)
-                  async for obj in info.context['db'].query(self._query.statement)
-                  if obj is not None]
-        self._cache[_id] = dict(since=now, data=result)
+
+def all_(cls):
+    async def inner(_, info, first=None, skip=None, **kwargs):
+        _q = f'FOR x in {cls._collname_}'
+        if first:
+            limit = f'LIMIT {first}'
+            if skip:
+                limit = f'LIMIT {skip}, {first}'
+            _q = f'{_q} {limit}'
+        _q = f'{_q} RETURN x'
+        result = [cls(**obj) async for obj in info.context['db'].query(_q)]
         return result
+    return inner
+
 
 class LiverSchema:
     def __init__(self,
-                 graphs: Optional[tuple]=None,
-                 nodes: Optional[tuple]=None,
-                 queries: Optional[tuple]=None,
+                 graphs: Optional[tuple] = None,
+                 nodes: Optional[tuple] = None,
+                 queries: Optional[tuple] = None,
                  mutations: Optional[tuple] = None,
                  subscriptions: Optional[tuple] = None):
 
@@ -69,28 +62,6 @@ class LiverSchema:
             self.register_mutations(*mutations)
         if isinstance(subscriptions, (list, tuple)):
             self.register_subscriptions(*subscriptions)
-
-    def _find(self, cls):
-        async def inner(_, info, **kwargs):
-            obj = cls(**kwargs)
-            await obj.get(self._db)
-            return obj
-        return inner
-
-    def _all(self, cls):
-        async def inner(_, info, first=None, skip=None, **kwargs):
-            print('running _all query')
-            _q = f'FOR x in {cls._collname_}'
-            if first:
-                limit = f'LIMIT {first}'
-                if skip:
-                    limit = f'LIMIT {skip}, {first}'
-                _q = f'{_q} {limit}'
-            _q = f'{_q} RETURN x'
-            result = [cls(**obj) async for obj in self._db.query(_q)]
-            print('returning from _all query')
-            return result
-        return inner
 
     async def setup(self, db: ArangoDB):
         print('schema setup')
@@ -151,8 +122,8 @@ class LiverSchema:
                 type(
                     f'{name}Query',
                     (ObjectType,),
-                    {snake_case(name): Field(node, _id=String(), resolver=self._find(node)),
-                     collname: LiverList(node, resolver=self._all(node))})
+                    {snake_case(name): Field(node, _id=String(), resolver=find_(node)),
+                     collname: LiverList(node, resolver=all_(node))})
             )
 
     def register_edge(self, edge):
